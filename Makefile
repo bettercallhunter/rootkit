@@ -11,7 +11,7 @@ build:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules  
 	
 sneaky_process: sneaky_process.c
-	gcc -std=gnu99 -Wall -pedantic -o sneaky_process sneaky_process.c 
+	gcc -std=gnu99 -o sneaky_process sneaky_process.c 
 
 clean:
 	rm -rf *.o *~ core .depend .*.cmd *.order *.symvers *.ko *.mod.c 

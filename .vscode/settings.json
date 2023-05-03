@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "module.h": "c"
+    },
+    "C_Cpp.default.configurationProvider": "ms-vscode.makefile-tools"
+}
